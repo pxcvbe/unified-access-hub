@@ -57,6 +57,22 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        // Role-specific colors
+        peternak: {
+          DEFAULT: "hsl(var(--peternak))",
+          foreground: "hsl(var(--peternak-foreground))",
+          light: "hsl(var(--peternak-light))",
+        },
+        agent: {
+          DEFAULT: "hsl(var(--agent))",
+          foreground: "hsl(var(--agent-foreground))",
+          light: "hsl(var(--agent-light))",
+        },
+        mitra: {
+          DEFAULT: "hsl(var(--mitra))",
+          foreground: "hsl(var(--mitra-foreground))",
+          light: "hsl(var(--mitra-light))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
