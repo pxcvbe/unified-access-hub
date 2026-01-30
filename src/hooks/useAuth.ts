@@ -1,84 +1,194 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
+import type { ReactNode } from "react";
+import type { User, Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
 
 export type UserRole = "peternak" | "agent" | "mitra";
 
-export interface User {
+export interface Profile {
   id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-  avatar?: string;
+  user_id: string;
+  full_name: string;
+  nik: string;
+  business_name: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string, role: UserRole) => Promise<void>;
-  logout: () => void;
-  isAuthenticated: boolean;
+  session: Session | null;
+  profile: Profile | null;
+  role: UserRole | null;
+  isLoading: boolean;
+  signUp: (email: string, password: string, fullName: string, nik: string, businessName: string, role: UserRole) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demonstration
-const mockUsers: Record<UserRole, User> = {
-  peternak: {
-    id: "1",
-    name: "Budi Santoso",
-    email: "budi@peternak.com",
-    role: "peternak",
-  },
-  agent: {
-    id: "2",
-    name: "Ahmad Wijaya",
-    email: "ahmad@agent.com",
-    role: "agent",
-  },
-  mitra: {
-    id: "3",
-    name: "PT Pakan Sejahtera",
-    email: "admin@mitrapakan.com",
-    role: "mitra",
-  },
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem("agrihub_user");
-    return saved ? JSON.parse(saved) : null;
-  });
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = async (email: string, password: string, role: UserRole) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    
-    const mockUser = mockUsers[role];
-    setUser(mockUser);
-    localStorage.setItem("agrihub_user", JSON.stringify(mockUser));
+  const fetchUserData = async (userId: string) => {
+    try {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (profileData) {
+        setProfile(profileData as Profile);
+      }
+
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (roleData) {
+        setRole(roleData.role as UserRole);
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
   };
 
-  const logout = () => {
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+
+        if (currentSession?.user) {
+          setTimeout(() => {
+            fetchUserData(currentSession.user.id);
+          }, 0);
+        } else {
+          setProfile(null);
+          setRole(null);
+        }
+
+        if (event === "SIGNED_OUT") {
+          setProfile(null);
+          setRole(null);
+        }
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+      setSession(existingSession);
+      setUser(existingSession?.user ?? null);
+      
+      if (existingSession?.user) {
+        fetchUserData(existingSession.user.id).finally(() => {
+          setIsLoading(false);
+        });
+      } else {
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signUp = async (
+    email: string,
+    password: string,
+    fullName: string,
+    nik: string,
+    businessName: string,
+    userRole: UserRole
+  ): Promise<{ error: Error | null }> => {
+    const redirectUrl = window.location.origin + "/";
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: redirectUrl,
+      },
+    });
+
+    if (error) {
+      return { error };
+    }
+
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .insert({
+          user_id: data.user.id,
+          full_name: fullName,
+          nik: nik,
+          business_name: businessName,
+        });
+
+      if (profileError) {
+        return { error: profileError };
+      }
+
+      const { error: roleError } = await supabase
+        .from("user_roles")
+        .insert({
+          user_id: data.user.id,
+          role: userRole,
+        });
+
+      if (roleError) {
+        return { error: roleError };
+      }
+    }
+
+    return { error: null };
+  };
+
+  const signIn = async (email: string, password: string): Promise<{ error: Error | null }> => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    return { error };
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("agrihub_user");
+    setSession(null);
+    setProfile(null);
+    setRole(null);
   };
 
-  return {
+  const value: AuthContextType = {
     user,
-    login,
-    logout,
-    isAuthenticated: !!user,
+    session,
+    profile,
+    role,
+    isLoading,
+    signUp,
+    signIn,
+    signOut,
   };
+
+  return React.createElement(
+    AuthContext.Provider,
+    { value },
+    children
+  );
 }
 
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    // Return default values if not in provider (for initial render)
-    return {
-      user: null,
-      login: async () => {},
-      logout: () => {},
-      isAuthenticated: false,
-    };
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

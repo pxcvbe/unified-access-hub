@@ -1,38 +1,19 @@
-import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { UserMenu } from "@/components/UserMenu";
 import { NotificationBell } from "@/components/NotificationBell";
 import { notifikasiPeternak } from "@/data/mockData";
-import type { UserRole } from "@/hooks/useAuth";
-
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: UserRole;
-}
+import { useAuth } from "@/hooks/useAuth";
 
 export function DashboardLayout() {
-  const navigate = useNavigate();
-  const [user, setUser] = useState<User | null>(null);
+  const { profile, role, signOut } = useAuth();
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem("agrihub_user");
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    } else {
-      navigate("/login");
-    }
-  }, [navigate]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("agrihub_user");
-    navigate("/login");
+  const handleLogout = async () => {
+    await signOut();
   };
 
-  if (!user) {
+  if (!role) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -40,10 +21,13 @@ export function DashboardLayout() {
     );
   }
 
+  const displayName = profile?.full_name || "User";
+  const displayEmail = profile?.business_name || "";
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <AppSidebar role={user.role} />
+        <AppSidebar role={role} />
 
         <div className="flex-1 flex flex-col">
           {/* Header */}
@@ -62,9 +46,9 @@ export function DashboardLayout() {
                   onNotificationClick={(id) => console.log("Notification clicked:", id)}
                 />
                 <UserMenu
-                  name={user.name}
-                  email={user.email}
-                  role={user.role}
+                  name={displayName}
+                  email={displayEmail}
+                  role={role}
                   onLogout={handleLogout}
                 />
               </div>
