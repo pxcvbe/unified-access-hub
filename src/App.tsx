@@ -3,10 +3,12 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/hooks/useAuth";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 // Pages
-import Login from "./pages/Login";
+import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
 // Peternak Pages
@@ -38,41 +40,65 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          {/* Redirect root to login */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
+        <AuthProvider>
+          <Routes>
+            {/* Redirect root to auth */}
+            <Route path="/" element={<Navigate to="/auth" replace />} />
+            <Route path="/login" element={<Navigate to="/auth" replace />} />
+            <Route path="/auth" element={<Auth />} />
 
-          {/* Peternak Routes */}
-          <Route path="/peternak" element={<DashboardLayout />}>
-            <Route index element={<PeternakDashboard />} />
-            <Route path="ternak" element={<TernakPage />} />
-            <Route path="produksi" element={<ProduksiPage />} />
-            <Route path="pakan" element={<PakanPage />} />
-            <Route path="transaksi" element={<TransaksiPage />} />
-          </Route>
+            {/* Peternak Routes */}
+            <Route
+              path="/peternak"
+              element={
+                <ProtectedRoute allowedRole="peternak">
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<PeternakDashboard />} />
+              <Route path="ternak" element={<TernakPage />} />
+              <Route path="produksi" element={<ProduksiPage />} />
+              <Route path="pakan" element={<PakanPage />} />
+              <Route path="transaksi" element={<TransaksiPage />} />
+            </Route>
 
-          {/* Agent Routes */}
-          <Route path="/agent" element={<DashboardLayout />}>
-            <Route index element={<AgentDashboard />} />
-            <Route path="penjualan" element={<PenjualanPage />} />
-            <Route path="peternak" element={<PeternakBinaanPage />} />
-            <Route path="pesanan" element={<PesananAgentPage />} />
-            <Route path="laporan" element={<LaporanAgentPage />} />
-          </Route>
+            {/* Agent Routes */}
+            <Route
+              path="/agent"
+              element={
+                <ProtectedRoute allowedRole="agent">
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<AgentDashboard />} />
+              <Route path="penjualan" element={<PenjualanPage />} />
+              <Route path="peternak" element={<PeternakBinaanPage />} />
+              <Route path="pesanan" element={<PesananAgentPage />} />
+              <Route path="laporan" element={<LaporanAgentPage />} />
+            </Route>
 
-          {/* Mitra Pakan Routes */}
-          <Route path="/mitra" element={<DashboardLayout />}>
-            <Route index element={<MitraDashboard />} />
-            <Route path="inventory" element={<InventoryPage />} />
-            <Route path="pesanan" element={<PesananMasukPage />} />
-            <Route path="daftar-mitra" element={<DaftarMitraPage />} />
-            <Route path="laporan" element={<LaporanMitraPage />} />
-          </Route>
+            {/* Mitra Pakan Routes */}
+            <Route
+              path="/mitra"
+              element={
+                <ProtectedRoute allowedRole="mitra">
+                  <DashboardLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<MitraDashboard />} />
+              <Route path="inventory" element={<InventoryPage />} />
+              <Route path="pesanan" element={<PesananMasukPage />} />
+              <Route path="daftar-mitra" element={<DaftarMitraPage />} />
+              <Route path="laporan" element={<LaporanMitraPage />} />
+            </Route>
 
-          {/* Catch-all 404 */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+            {/* Catch-all 404 */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
