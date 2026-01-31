@@ -1,232 +1,121 @@
 
-# Rencana Implementasi AgriHub
+# Rencana Perbaikan Error RLS dan Format Pendaftaran
 
-## Ringkasan
-Membangun platform agrikultur **AgriHub** dengan tampilan split-screen login dan 3 dashboard untuk Peternak, Agent, dan Mitra Pakan. Semua UI dalam Bahasa Indonesia dengan desain gradien hijau/alam seperti referensi SATU PINTU.
+## Masalah yang Ditemukan
 
----
+Error `new row violates row-level security policy for table "profiles"` terjadi karena:
 
-## Fase 1: Setup Design System & Theme
-
-### Update Warna (src/index.css)
-Menambahkan custom CSS variables untuk tema hijau agrikultur:
-- Primary: Hijau tua (forest green)
-- Accent: Hijau muda (lime green)
-- Warna khusus untuk setiap role:
-  - Peternak: Hijau (green)
-  - Agent: Biru (blue)
-  - Mitra Pakan: Kuning/Oranye (amber)
+1. Ketika user mendaftar dengan email confirmation **enabled**, session belum aktif
+2. RLS policy menggunakan `auth.uid() = user_id` untuk INSERT, tapi `auth.uid()` masih null karena user belum terverifikasi
+3. Insert profile/role dilakukan dari client-side yang tidak punya akses
 
 ---
 
-## Fase 2: Halaman Login (Split-Screen)
+## Solusi: Database Trigger dengan Security Definer
 
-### Membuat src/pages/Login.tsx
-**Sisi Kiri (50%):**
-- Background gradien hijau dengan overlay
-- Logo AgriHub besar
-- Tagline: "Ekosistem Pertanian Terintegrasi"
-- Ilustrasi/gambar pertanian
+Menggunakan **database trigger** yang berjalan dengan **SECURITY DEFINER** untuk membuat profile dan role secara otomatis.
 
-**Sisi Kanan (50%):**
-- Form login dengan:
-  - Pilihan role (RadioGroup): Peternak, Agent, Mitra Pakan
-  - Input email
-  - Input password
-  - Tombol login (warna berubah sesuai role)
-  - Link "Lupa Password?" dan "Daftar Akun"
-
-**Responsif Mobile:**
-- Full-width form dengan background gradien
+### Alur Baru:
+1. User mengisi form pendaftaran
+2. Data tambahan (fullName, nik, businessName, role) disimpan di `user_metadata` saat signup
+3. Trigger `handle_new_user` otomatis membuat profile dan role dari metadata
+4. RLS policy tidak perlu diubah karena trigger menggunakan SECURITY DEFINER
 
 ---
 
-## Fase 3: Layout Dashboard
+## Langkah Implementasi
 
-### Membuat src/components/DashboardLayout.tsx
-- Menggunakan SidebarProvider dari Shadcn
-- Header dengan nama user, notifikasi, tombol logout
-- Sidebar navigasi dengan ikon dan label Bahasa Indonesia
-- Main content area
-- Responsif: hamburger menu untuk mobile
+### 1. Migration Database Baru
 
-### Membuat src/components/AppSidebar.tsx
-Menu navigasi berbeda untuk setiap role:
+Membuat trigger yang berjalan saat ada user baru di `auth.users`:
 
-**Peternak:**
-- Beranda
-- Ternak Saya
-- Produksi
-- Stok Pakan
-- Transaksi
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Create profile from user metadata
+    INSERT INTO public.profiles (user_id, full_name, nik, business_name)
+    VALUES (
+        NEW.id,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
+        COALESCE(NEW.raw_user_meta_data->>'nik', ''),
+        COALESCE(NEW.raw_user_meta_data->>'business_name', '')
+    );
+    
+    -- Create user role from metadata
+    INSERT INTO public.user_roles (user_id, role)
+    VALUES (
+        NEW.id,
+        (NEW.raw_user_meta_data->>'role')::app_role
+    );
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-**Agent:**
-- Beranda
-- Penjualan
-- Peternak Binaan
-- Pesanan
-- Laporan
+-- Trigger on auth.users
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
 
-**Mitra Pakan:**
-- Beranda
-- Inventory
-- Pesanan Masuk
-- Mitra
-- Laporan
+### 2. Update useAuth.ts
 
----
+Mengubah `signUp` untuk menyimpan data di `user_metadata`:
 
-## Fase 4: Dashboard Peternak
-
-### Membuat src/pages/peternak/Dashboard.tsx
-**Komponen:**
-- **StatCards**: Total ternak, produksi hari ini, pendapatan estimasi, stok pakan
-- **Grafik Produksi**: Line chart produksi mingguan (Recharts)
-- **Tabel Ternak**: Daftar ternak dengan status kesehatan
-- **Notifikasi**: Reminder pakan, jadwal vaksin
-
-### Halaman Tambahan:
-- `/peternak/ternak` - Manajemen ternak
-- `/peternak/produksi` - Data produksi
-- `/peternak/pakan` - Stok pakan
-- `/peternak/transaksi` - Riwayat transaksi
-
----
-
-## Fase 5: Dashboard Agent
-
-### Membuat src/pages/agent/Dashboard.tsx
-**Komponen:**
-- **StatCards**: Total penjualan, komisi bulan ini, target, jumlah peternak
-- **Grafik Kinerja**: Bar chart penjualan bulanan
-- **Tabel Pesanan**: Pesanan terbaru dengan status
-- **List Peternak**: Top 5 peternak aktif
-
-### Halaman Tambahan:
-- `/agent/penjualan` - Laporan penjualan
-- `/agent/peternak` - Daftar peternak binaan
-- `/agent/pesanan` - Manajemen pesanan
-- `/agent/laporan` - Laporan kinerja
-
----
-
-## Fase 6: Dashboard Mitra Pakan
-
-### Membuat src/pages/mitra/Dashboard.tsx
-**Komponen:**
-- **StatCards**: Total produk, pesanan pending, revenue bulan ini, mitra aktif
-- **Grafik Penjualan**: Pie chart top products
-- **Tabel Inventory**: Stok produk dengan harga
-- **Pesanan Terbaru**: List pesanan masuk
-
-### Halaman Tambahan:
-- `/mitra/inventory` - Manajemen inventory
-- `/mitra/pesanan` - Pesanan masuk
-- `/mitra/daftar-mitra` - Koneksi dengan agent/farmer
-- `/mitra/laporan` - Laporan penjualan
-
----
-
-## Fase 7: Komponen Shared
-
-### Membuat komponen reusable:
-```text
-src/components/
-  StatCard.tsx        - Card untuk statistik dengan ikon
-  DataTable.tsx       - Tabel data dengan sorting
-  ChartCard.tsx       - Wrapper untuk grafik Recharts
-  PageHeader.tsx      - Header halaman dengan breadcrumb
-  NotificationBell.tsx - Dropdown notifikasi
-  UserMenu.tsx        - Dropdown user profile
+```typescript
+const signUp = async (...) => {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      emailRedirectTo: redirectUrl,
+      data: {
+        full_name: fullName,
+        nik: nik,
+        business_name: businessName,
+        role: userRole,
+      },
+    },
+  });
+  
+  // Tidak perlu insert manual lagi - trigger yang handle
+  return { error };
+};
 ```
 
 ---
 
-## Fase 8: Routing
+## Format Pendaftaran
 
-### Update src/App.tsx
-```text
-Routes:
-  /                    -> Redirect ke /login
-  /login               -> Halaman Login
-  /peternak            -> Dashboard Peternak
-  /peternak/*          -> Halaman-halaman Peternak
-  /agent               -> Dashboard Agent
-  /agent/*             -> Halaman-halaman Agent
-  /mitra               -> Dashboard Mitra Pakan
-  /mitra/*             -> Halaman-halaman Mitra
-```
+Sesuai permintaan, berikut format pendaftaran yang sudah diimplementasi:
 
----
+| Field | Deskripsi | Validasi |
+|-------|-----------|----------|
+| **Nama Lengkap** | Nama sesuai KTP | Min 3 karakter, max 100 |
+| **NIK** | Nomor Induk Kependudukan | Harus 16 digit angka |
+| **Email** | Alamat email | Format email valid |
+| **Password** | Kata sandi | Minimal 6 karakter |
+| **Konfirmasi Password** | Ulangi password | Harus sama dengan password |
+| **Nama Kandang/Toko/Perusahaan** | Sesuai role yang dipilih | Min 2 karakter, max 100 |
 
-## Fase 9: Mock Data
-
-### Membuat src/data/mockData.ts
-Data dummy untuk:
-- Daftar ternak
-- Data produksi (untuk grafik)
-- Daftar pesanan
-- Inventory pakan
-- Statistik dashboard
+**Role yang tersedia:**
+- **Peternak**: Meminta "Nama Kandang"
+- **Agent**: Meminta "Nama Toko"  
+- **Mitra Pakan**: Meminta "Nama Perusahaan"
 
 ---
 
-## Struktur File yang Akan Dibuat
+## File yang Akan Diubah
 
-```text
-src/
-  components/
-    AppSidebar.tsx
-    DashboardLayout.tsx
-    StatCard.tsx
-    PageHeader.tsx
-    UserMenu.tsx
-    NotificationBell.tsx
-  pages/
-    Login.tsx
-    peternak/
-      Dashboard.tsx
-      Ternak.tsx
-      Produksi.tsx
-      Pakan.tsx
-      Transaksi.tsx
-    agent/
-      Dashboard.tsx
-      Penjualan.tsx
-      PeternakBinaan.tsx
-      Pesanan.tsx
-      Laporan.tsx
-    mitra/
-      Dashboard.tsx
-      Inventory.tsx
-      PesananMasuk.tsx
-      DaftarMitra.tsx
-      Laporan.tsx
-  data/
-    mockData.ts
-  hooks/
-    useAuth.ts (simple context untuk role management)
-```
+1. **Baru**: `supabase/migrations/[timestamp]_fix_signup_trigger.sql` - Trigger untuk handle signup
+2. **Update**: `src/hooks/useAuth.ts` - Simpan data di user_metadata, hapus insert manual
 
 ---
 
-## Detail Teknis
+## Keuntungan Solusi Ini
 
-### Dependencies yang Digunakan (sudah terinstall):
-- **react-router-dom**: Routing
-- **recharts**: Grafik dan visualisasi data
-- **lucide-react**: Ikon
-- **Shadcn UI**: Komponen UI (Sidebar, Card, Table, Button, dll)
-
-### Estimasi Langkah Implementasi:
-1. Update theme/warna di index.css
-2. Buat halaman Login dengan split-screen design
-3. Buat DashboardLayout dan AppSidebar
-4. Buat komponen shared (StatCard, PageHeader, dll)
-5. Buat mock data
-6. Buat Dashboard Peternak dengan semua halaman
-7. Buat Dashboard Agent dengan semua halaman
-8. Buat Dashboard Mitra dengan semua halaman
-9. Update App.tsx dengan semua routes
-10. Testing responsivitas
-
+- User bisa mendaftar meskipun email confirmation **enabled**
+- Data profile dan role dibuat secara atomik oleh database
+- Tidak ada race condition antara signup dan insert
+- RLS policies tetap aman karena trigger menggunakan SECURITY DEFINER
