@@ -1,78 +1,77 @@
-import { Plus, Search } from "lucide-react";
+import { Plus, Bird, HeartPulse, TrendingDown } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ternakData } from "@/data/mockData";
+import { KandangCard } from "@/components/peternak/KandangCard";
+import { StatCardLarge } from "@/components/peternak/StatCardLarge";
+import { kandangData, statistikTernak } from "@/data/mockDataTernak";
 
 export default function TernakPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ternak Saya"
-        description="Kelola data ternak Anda"
+        title="Hewan Ternak"
+        description="Kelola data kandang dan populasi ternak Anda"
         breadcrumbs={[
           { label: "Dashboard", href: "/peternak" },
-          { label: "Ternak Saya" },
+          { label: "Hewan Ternak" },
         ]}
-        actions={
-          <Button className="gradient-peternak text-white">
-            <Plus className="h-4 w-4 mr-2" />
-            Tambah Ternak
-          </Button>
-        }
       />
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Daftar Ternak</CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Cari ternak..." className="pl-9" />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Nama</TableHead>
-                <TableHead>Jenis</TableHead>
-                <TableHead>Umur</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Produksi Harian</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {ternakData.map((ternak) => (
-                <TableRow key={ternak.id}>
-                  <TableCell className="text-muted-foreground">#{ternak.id}</TableCell>
-                  <TableCell className="font-medium">{ternak.nama}</TableCell>
-                  <TableCell>{ternak.jenis}</TableCell>
-                  <TableCell>{ternak.umur}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={ternak.status === "Sehat" ? "default" : "destructive"}
-                      className={
-                        ternak.status === "Sehat"
-                          ? "bg-green-100 text-green-700 hover:bg-green-100"
-                          : ""
-                      }
-                    >
-                      {ternak.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">{ternak.produksiHarian}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Stats Grid */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCardLarge
+          label="Total Populasi"
+          value={statistikTernak.totalPopulasi}
+          unit="ekor"
+          icon={Bird}
+          iconColor="text-peternak"
+          iconBgColor="bg-peternak/10"
+        />
+        <StatCardLarge
+          label="Ayam Sakit / Karantina"
+          value={statistikTernak.ayamSakitKarantina}
+          unit="ekor"
+          icon={HeartPulse}
+          iconColor="text-destructive"
+          iconBgColor="bg-destructive/10"
+        />
+        <StatCardLarge
+          label="Mortality Rate"
+          value={`${statistikTernak.mortalityRate}%`}
+          icon={TrendingDown}
+          iconColor="text-peternak"
+          iconBgColor="bg-peternak/10"
+          description="Global (Semua Kandang)"
+        />
+      </div>
+
+      {/* Kandang List */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-foreground">Daftar Kandang (Coop)</h2>
+          <Button className="gradient-peternak text-white">
+            <Plus className="h-4 w-4 mr-2" />
+            Tambah Populasi Baru
+          </Button>
+        </div>
+        
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {kandangData.map((kandang) => (
+            <KandangCard
+              key={kandang.id}
+              id={kandang.id}
+              nama={kandang.nama}
+              jenis={kandang.jenis}
+              umur={kandang.umur}
+              populasi={kandang.populasi}
+              kapasitas={kandang.kapasitas}
+              status={kandang.status}
+              onLaporMati={() => console.log("Lapor mati:", kandang.id)}
+              onUbahStatus={() => console.log("Ubah status:", kandang.id)}
+            />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
