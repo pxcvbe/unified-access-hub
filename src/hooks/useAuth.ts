@@ -109,45 +109,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ error: Error | null }> => {
     const redirectUrl = window.location.origin + "/";
 
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
-      },
-    });
-
-    if (error) {
-      return { error };
-    }
-
-    if (data.user) {
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert({
-          user_id: data.user.id,
+        data: {
           full_name: fullName,
           nik: nik,
           business_name: businessName,
-        });
-
-      if (profileError) {
-        return { error: profileError };
-      }
-
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert({
-          user_id: data.user.id,
           role: userRole,
-        });
+        },
+      },
+    });
 
-      if (roleError) {
-        return { error: roleError };
-      }
-    }
-
-    return { error: null };
+    return { error };
   };
 
   const signIn = async (email: string, password: string): Promise<{ error: Error | null }> => {
